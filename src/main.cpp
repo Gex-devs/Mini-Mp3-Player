@@ -1,41 +1,73 @@
 #include <Arduino.h>
 #include "DFRobotDFPlayerMini.h"
-
+#include <DFPlayerMini_Fast.h>
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <SPI.h>
+#include <SoftwareSerial.h>
+#include <Bounce2.h>
 
+SoftwareSerial SoftSerial(10, 11);
 
+// Declared functions
+void printDetail(uint8_t type, int value);
+void initMiniPlayer();
+void initMiniDisplay();
+void PlayerUiHandler();
+void ControllerInit();
+void ControlHandler(uint8_t EncoderA, uint8_t EncoderB, uint8_t PushBtn);
 
-//Rotary Encoder pins
-uint8_t RPinA = 23;
-uint8_t RPinB = 24;
-uint8_t RotaryPushBtn = 25;
+// Rotary Encoder pins
+uint8_t RPinA = 3;
+uint8_t RPinB = 4;
+uint8_t RotaryPushBtn = 7;
 
 // Tft Display Pin
-uint8_t TFT_CS = ;
-uint8_t TFT_DC = ;
-uint8_t TFT_RST = ;
+uint8_t TFT_CS = A5;
+uint8_t TFT_DC = A4;
+uint8_t TFT_RST = A3;
 
-// PowerOutPin
-uint8_t Vout = 26;
+#define TFT_CS A5
+#define TFT_RST A3
+#define TFT_DC A4
 
+#define TFT_SCLK A1
+#define TFT_MOSI A2
 
+// 5v Pin
+uint8_t Vout = 2;
+
+DFPlayerMini_Fast Thedfplayer;
 DFRobotDFPlayerMini myDFPlayer;
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
 
-int Setup()
+// button handler
+// Bounce debouncer = Bounce();
+bool singleClickDetected = false;
+bool doubleClickDetected = false;
+bool longHoldDetected = false;
+unsigned long lastClickTime = 0;
+
+const int debounceInterval = 10;  
+const int longHoldDuration = 1000;
+
+void setup()
 {
-
-  Serial.begin(115200);
+  Serial.begin(9600);
+  SoftSerial.begin(9600);
   Serial.println("Mini Player Starting...");
+  initMiniPlayer();
+  initMiniDisplay();
+  // ControllerInit();
 }
 
 void loop()
 {
 
+  ControlHandler(RPinA, RPinB, RotaryPushBtn);
 
+  // PlayerUiHandler();
 }
 
 void initPins()
@@ -43,172 +75,161 @@ void initPins()
 
   // TODO: Assign all pins respectively using Registers if possible
 
-  pinMode(RPinA,INPUT);
-  pinMode(RPinB,INPUT);
-  pinMode(RotaryPushBtn,INPUT);
+  pinMode(RPinA, INPUT);
+  pinMode(RPinB, INPUT);
+  pinMode(RotaryPushBtn, INPUT_PULLUP);
 
-
-  pinMode(Vout,OUTPUT);
-
+  pinMode(Vout, OUTPUT);
 }
-
 
 void initMiniPlayer()
 {
-  if (!myDFPlayer.begin(Serial, /*isACK = */ true, /*doReset = */ true))
+  // Enable loop
+
+  if (!Thedfplayer.begin(SoftSerial, true))
   { // Use serial to communicate with mp3.
     Serial.println(F("Unable to begin:"));
     Serial.println(F("1.Please recheck the connection!"));
     Serial.println(F("2.Please insert the SD card!"));
-    while (true)
-    {
-      delay(0); // Code to compatible with ESP8266 watch dog.
-    }
+    // while (true)
+    // {
+    //   delay(0); // Code to compatible with ESP8266 watch dog.
+    // }
   }
   Serial.println(F("DFPlayer Mini online."));
+  myDFPlayer.enableLoopAll();
 
-  myDFPlayer.volume(10); // Set volume value. From 0 to 30
-  // myDFPlayer.play(1);    // Play the first mp3
+  Thedfplayer.volume(5);
+  Thedfplayer.play(1);
 }
 
-void MiniPlayerHanlder()
+void PlayerUiHandler()
 {
-  if (myDFPlayer.available())
+  static int currentSdTrack = Thedfplayer.currentSdTrack();
+  static int currentnumSdTracks = Thedfplayer.numSdTracks();
+  static int currentVolume = Thedfplayer.currentVolume();
+
+  if (currentSdTrack != Thedfplayer.currentSdTrack())
   {
-    printDetail(myDFPlayer.readType(), myDFPlayer.read()); // Print the detail message from DFPlayer to handle different errors and states.
+
+    currentSdTrack = Thedfplayer.currentSdTrack();
+    // Display current song information
+    tft.setCursor(10, 10);
+    tft.print("Song: ");
+    tft.print(currentnumSdTracks);
+  }
+
+  if (currentnumSdTracks != Thedfplayer.numSdTracks())
+  {
+    currentnumSdTracks = Thedfplayer.numSdTracks();
+    // Display total songs information
+    tft.setCursor(10, 40);
+    tft.print("Total: ");
+    tft.print(currentnumSdTracks);
+  }
+
+  if (currentVolume != Thedfplayer.currentVolume())
+  {
+    currentVolume = Thedfplayer.currentVolume();
+    // Display volume information
+    tft.setCursor(10, 70);
+    tft.print("Volume: ");
+    tft.print(currentVolume);
   }
 }
 
-void printDetail(uint8_t type, int value)
-{
-  switch (type)
-  {
-  case TimeOut:
-    Serial.println(F("Time Out!"));
-    break;
-  case WrongStack:
-    Serial.println(F("Stack Wrong!"));
-    break;
-  case DFPlayerCardInserted:
-    Serial.println(F("Card Inserted!"));
-    break;
-  case DFPlayerCardRemoved:
-    Serial.println(F("Card Removed!"));
-    break;
-  case DFPlayerCardOnline:
-    Serial.println(F("Card Online!"));
-    break;
-  case DFPlayerUSBInserted:
-    Serial.println("USB Inserted!");
-    break;
-  case DFPlayerUSBRemoved:
-    Serial.println("USB Removed!");
-    break;
-  case DFPlayerPlayFinished:
-    Serial.print(F("Number:"));
-    Serial.print(value);
-    Serial.println(F(" Play Finished!"));
-    break;
-  case DFPlayerError:
-    Serial.print(F("DFPlayerError:"));
-    switch (value)
-    {
-    case Busy:
-      Serial.println(F("Card not found"));
-      break;
-    case Sleeping:
-      Serial.println(F("Sleeping"));
-      break;
-    case SerialWrongStack:
-      Serial.println(F("Get Wrong Stack"));
-      break;
-    case CheckSumNotMatch:
-      Serial.println(F("Check Sum Not Match"));
-      break;
-    case FileIndexOut:
-      Serial.println(F("File Index Out of Bound"));
-      break;
-    case FileMismatch:
-      Serial.println(F("Cannot Find File"));
-      break;
-    case Advertise:
-      Serial.println(F("In Advertise"));
-      break;
-    default:
-      break;
-    }
-    break;
-  default:
-    break;
-  }
-}
+// void ControllerInit()
+// {
+//   debouncer.attach(RotaryPushBtn);
+//   debouncer.interval(debounceInterval);
+// }
 
 // Rotary Encoder Input Handler
 void ControlHandler(uint8_t EncoderA, uint8_t EncoderB, uint8_t PushBtn)
 {
 
-  /*Encoder A = CLK
-    Encoder B = DT
-    PushBtn = SW
-  */
+  static int pinALast = digitalRead(EncoderA);
+  static int aVal;
 
-  static unsigned long DebounceTime = 0;
-  static unsigned int LastBtnRead = digitalRead(PushBtn);
-
-  static int pinALast = digitalRead(EncoderA); // Assigned Here only once
-
-  int aVal = digitalRead(EncoderA);
+  aVal = digitalRead(EncoderA);
 
   if (aVal != pinALast)
   { // Means the knob is rotating
     // if the knob is rotating, we need to determine direction
     // We do that by reading pin B.
     if (digitalRead(EncoderB) != aVal)
-    {
-      // Means pin A Changed first - We're Rotating Clockwise
-      myDFPlayer.volumeUp();
+    { // Means pin A Changed first - We're Rotating Clockwise
+      Thedfplayer.incVolume();
+      Serial.println("Volume Increased");
     }
     else
     { // Otherwise B changed first and we're moving CCW
-
-      myDFPlayer.volumeDown();
+      Thedfplayer.decVolume();
+      Serial.println("Volume Decreased");
     }
   }
   pinALast = aVal;
 
-  if (digitalRead(PushBtn) != LastBtnRead)
-  {
-    DebounceTime = millis();
+  // button handler
+  // debouncer.update();
+  // unsigned long currentMillis = millis();
 
-    if (DebounceTime - millis() > 3000)
-    {
-      if (PushBtn == LOW)
-      {
-        // TODO: find out the state and change accordingly from pause to play
-        myDFPlayer.readState();
-      }
-    }
-  }
+  // if (debouncer.fell()) {
+  //   // Button pressed, check for single-click or double-click
+  //   if ((currentMillis - lastClickTime) < 250) {
+  //     // Double-click detected
+  //     Serial.println("Double Click Detected");
+  //     doubleClickDetected = true;
+  //     Thedfplayer.playNext();
+  //   } else {
+  //     // Single-click detected, but wait to see if it's a double-click
+  //     singleClickDetected = true;
+  //     lastClickTime = currentMillis;
+  //   }
+  // }
 
-  LastBtnRead = digitalRead(PushBtn);
+  // if (debouncer.rose() && singleClickDetected) {
+  //   // Button released, and it was a single-click
+  //   Serial.println("Single Click Detected");
+  //   singleClickDetected = false;  // Reset for the next click
+  //   Thedfplayer.resume();
+
+  // }
+
+  // // Check for long-hold
+  // if (debouncer.read() == LOW && !longHoldDetected) {
+  //   if ((currentMillis - lastClickTime) >= longHoldDuration) {
+  //     // Long-hold detected
+  //     Serial.println("Long Hold Detected");
+  //     longHoldDetected = true;
+  //     Thedfplayer.pause();
+  //   }
+  // }
+
+  // // Check for long-hold release
+  // if (debouncer.rose() && longHoldDetected) {
+  //   Serial.println("Long Hold Released");
+  //   longHoldDetected = false;  // Reset for the next long-hold
+  // }
 }
 
+void initMiniDisplay()
+{
 
-int initMiniDisplay(){
+  tft.initR(INITR_BLACKTAB);
+  tft.fillScreen(ST7735_BLACK); // Clear the screen
 
-  tft.initR(INITR_MINI160x80);
+  tft.setRotation(3);
 
-  Serial.println(F("Initialized Mini Display"));
+  tft.setCursor(10, 10);
 
-  tft.fillScreen(ST77XX_BLACK);
+  tft.setTextSize(1);
 
+  tft.println("Gex mini Player");
 
-  // Test Purpose
+  tft.setCursor(10, 50);
 
-  tft.setCursor(0, 30);
-  tft.setTextColor(ST77XX_GREEN);
-  tft.setTextWrap(true);
-  tft.setTextSize(8);
-  tft.setRotation(-45);
-  tft.print("Gex");
+  tft.setTextSize(1);
+
+  tft.print("Current Version: 1.0");
 }
