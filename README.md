@@ -7,6 +7,9 @@ Mini Mp3 Player with Custom PCB
 <p>Board Image<p>
 <img src='./preview/Board.png'><img>
 
+<p>3d Model<p>
+<img src='./preview/3d_model.png'><img>
+
 # Parts List
 
 - Atmega328p-pu
@@ -17,3 +20,4 @@ Mini Mp3 Player with Custom PCB
 - DFPlayer
 - HT7333 3.3v Voltage regulator
 - Small Switch
+- KY040-HW Rotary encoder
